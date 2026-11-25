@@ -1,59 +1,73 @@
 # Usage Monitor (`agy-usage-pane`)
 
-Google Antigravity 向けのサイドペイン / サイドバー用 Usage Monitor プラグイン（MCP App）です。
+[日本語](README.ja.md)
 
-## 主な機能
+A compact Usage Monitor plugin (MCP App) for Google Antigravity's right side pane and left sidebar. It tracks 5h/weekly model quotas alongside offline local token usage, context size, and cache hit rates.
 
-- **クォータ残量表示（5h / 週次）**: 公式 `agy` CLI（`agy --print /usage --output-format json`）を単発実行して、モデルグループ別の残量バーとリセットまでのカウントダウンを表示します。
-  - 定期ポーリングは行いません。パネルを開いたとき（前回取得から2分以上経過時）と「クォータ更新」ボタン押下時のみ取得します（10秒の連続更新クールダウン付き）。
-- **ローカル使用量・キャッシュ集計（オフライン）**: `~/.gemini/antigravity/brain` と `~/.gemini/antigravity-cli/brain` の `transcript.jsonl` をローカルで読み取り、通信なしで10秒ごとに以下を集計・表示します。
-  - 最新セッションのコンテキストサイズ推定とモデル名
-  - 直近60分 / 最新セッションのキャッシュヒット率・トークン内訳・モデル別内訳
-  - `/compact` 送信ボタン（ホストがメッセージ送信機能を提供しているサイドペイン上のみ表示）
+![Usage Monitor side pane in Antigravity (English)](docs/usage-pane-en.png)
 
-## 動作要件
+## Features
 
-- Google Antigravity（MCP Apps / `aux_pane`・`global` エントリポイント対応版）
-- Node.js 20 以上（`PATH` 上で `node` が実行できること）
-- `agy` CLI（クォータ残量取得に使用。`ANTIGRAVITY_CLI_PATH` 環境変数、`~/.local/bin/agy`、`/opt/homebrew/bin/agy`、`/usr/local/bin/agy`、`PATH` の順で探索します）
+- **5h & Weekly Quota Balances**: Runs the official `agy` CLI (`agy --print /usage --output-format json`) on demand to display per-model-group remaining bars and reset countdowns.
+  - Automatic background polling is intentionally omitted out of respect for the service terms. To check your latest quota balances, manually click the **Refresh** button (**クォータ更新** in Japanese UI) inside the panel (an initial fetch runs once on panel open only if cached data is older than 2 minutes, and manual refreshes have a 10-second cooldown).
+- **Offline Local Usage & Cache Stats**: Reads local `transcript.jsonl` logs under `~/.gemini/antigravity/brain` and `~/.gemini/antigravity-cli/brain` every 10 seconds with zero network calls:
+  - Estimated context size and active model for the latest session
+  - Cache hit rate, token breakdown, and per-model summary (last 60 minutes and latest session)
+  - `/compact` shortcut button (shown only on surfaces where the host supports `sendMessage`, such as the conversation side pane)
+- **Bilingual UI (`Auto` / `JA` / `EN`)**: Defaults to `Auto`, following Antigravity's `hostContext.locale` (falling back to browser locale, then `en`) and `hostContext.timeZone`. Switch manually between `Auto`, `JA`, and `EN` from the header selector; your choice is persisted to `${PLUGIN_DATA}/preferences.json`.
 
-## インストール
+## Requirements
 
-バンドル済みの `dist/server.mjs` と `ui/dist/app.html` を同梱しているため、`npm install` なしでそのまま動きます。
+- **Google Antigravity** with MCP Apps support (`aux_pane` and `global` entrypoints)
+- **Node.js 20+** available as `node` in `PATH`
+- **Official `agy` CLI** for quota lookups (searched in order: `ANTIGRAVITY_CLI_PATH`, `~/.local/bin/agy`, `/opt/homebrew/bin/agy`, `/usr/local/bin/agy`, `PATH`)
+
+Verify prerequisites:
 
 ```bash
-git clone <repository-url> ~/.gemini/config/plugins/agy-usage-pane
+node -v
+agy --version
 ```
 
-別の場所へクローンして symlink で配置しても動作します。
+## Installation
+
+Prebuilt bundles (`dist/server.mjs` and `ui/dist/app.html`) are included in the repository, so no `npm install` step is required.
+
+Clone directly into Antigravity's plugins directory:
 
 ```bash
-git clone <repository-url> ~/plugins/agy-usage-pane
+git clone https://github.com/mlabo-org/agy-usage-pane.git ~/.gemini/config/plugins/agy-usage-pane
+```
+
+Or clone elsewhere and symlink it:
+
+```bash
+git clone https://github.com/mlabo-org/agy-usage-pane.git ~/plugins/agy-usage-pane
 ln -s ~/plugins/agy-usage-pane ~/.gemini/config/plugins/agy-usage-pane
 ```
 
-配置後、Antigravity の右サイドペインの `+` メニューまたは左サイドバーに **Usage** が表示されます。
+After installation, **Usage** appears in Antigravity's right side-pane `+` menu and in the left sidebar under **Plugins**.
 
-## 開発・ビルド
+## Development & Build
 
-ソース（`server/` や `ui/`）を変更した場合は再ビルドします。
+If you edit files under `server/` or `ui/`, rebuild the tracked bundles:
 
 ```bash
 npm install
 npm run build
 ```
 
-- `npm run build:ui`: `ui/app.ts` と `ui/index.html` から単一 HTML `ui/dist/app.html` を生成
-- `npm run build:server`: `server/index.mjs` 一式を単一 ESM バンドル `dist/server.mjs` に生成
+- `npm run build:ui`: Bundles `ui/app.ts`, `ui/i18n.ts`, and `ui/index.html` into a single self-contained `ui/dist/app.html`
+- `npm run build:server`: Bundles `server/index.mjs` and its dependencies into a single ESM file `dist/server.mjs`
 
-## 既知の制限・注意点
+## Known Limitations & Privacy Notes
 
-- Antigravity のローカルログ（`transcript.jsonl` の `PLANNER_RESPONSE` 行）および `agy --print /usage --output-format json` の出力スキーマに依存しているため、Antigravity 本体の仕様変更により動作しなくなる場合があります。
-- コンテキスト使用率は 1,000,000 トークンを基準に算出しています（200k 上限のモデルなどでは割合が低く表示されます）。
-- UI 文言および日時表示は現在日本語（`ja-JP`）固定です。
-- セッションログ内に `cwd=<path>` 行が記録されている環境では、そのディレクトリの Git ブランチ・変更件数も表示します（記録がない環境では非表示になります）。
-- 外部へのテレメトリ送信や非公開エンドポイントへのアクセスは行いません。クォータキャッシュはプラグインデータ領域（`${PLUGIN_DATA}/quota-cache.json`）にのみ保存されます。
+- Depends on Antigravity's local `transcript.jsonl` (`PLANNER_RESPONSE` rows) and the JSON output schema of `agy --print /usage --output-format json`; upstream Antigravity changes may require updates.
+- Context utilization percentage is calculated against an assumed 1,000,000-token window (models with smaller windows will display a lower percentage).
+- In `Auto` mode, the UI prioritizes `hostContext.locale` so it follows Antigravity's locale automatically as host localization evolves. On hosts that always report English, use the header selector to pick `JA` or `EN` explicitly.
+- When a session log records a `cwd=<path>` line, the panel also displays that directory's Git branch and modified-file count; otherwise the Git row is omitted.
+- No external telemetry or undocumented endpoints are used. Quota cache (`${PLUGIN_DATA}/quota-cache.json`) and UI preferences (`${PLUGIN_DATA}/preferences.json`) are stored locally in the plugin data directory only.
 
 ## License
 
-MIT
+[MIT](LICENSE)
