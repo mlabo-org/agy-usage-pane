@@ -1,0 +1,23 @@
+{
+  "name": "agy-usage-pane",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "license": "MIT",
+  "author": "Makoto Suzuki",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "build": "npm run build:ui && npm run build:server",
+    "build:ui": "node scripts/build-ui.mjs",
+    "build:server": "node scripts/build-server.mjs"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.25.0",
+    "@modelcontextprotocol/ext-apps": "^1.0.0"
+  },
+  "devDependencies": {
+    "esbuild": "^0.25.0"
+  }
+}

@@ -1,0 +1,13 @@
+{
+  "name": "agy-usage-pane",
+  "displayName": "Usage Monitor",
+  "version": "0.1.0",
+  "author": "Makoto Suzuki",
+  "description": "Right side-pane monitor for Antigravity 5h/weekly quotas (manual refresh via agy CLI) and offline local token/cache stats.",
+  "logo": "assets/logo.svg",
+  "suggestedPrompts": [
+    "使用量モニターを右サイドペインで開いて",
+    "直近1時間のトークン使用量とキャッシュ率を確認して",
+    "Usage Monitor を開いて"
+  ]
+}
