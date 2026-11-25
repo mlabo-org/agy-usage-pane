@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="ja">
+<html lang="en">
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
@@ -59,6 +59,31 @@
         align-items: center;
         gap: 7px;
         min-width: 0;
+      }
+
+      .header-actions {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        flex-shrink: 0;
+      }
+
+      .lang-select {
+        border: 1px solid var(--border);
+        background: var(--bg-secondary);
+        color: var(--text-primary);
+        font-family: var(--font-ui);
+        font-size: 11px;
+        font-weight: 500;
+        padding: 3px 6px;
+        border-radius: 6px;
+        cursor: pointer;
+        line-height: 1.45;
+        transition: opacity 0.15s ease, border-color 0.15s ease;
+      }
+
+      .lang-select:hover {
+        border-color: var(--text-secondary);
       }
 
       .dot {
@@ -422,7 +447,7 @@
   </head>
   <body>
     <main class="app" id="root">
-      <div class="empty">読み込み中...</div>
+      <div class="empty">Loading...</div>
     </main>
     <!-- INLINE_SCRIPT -->
   </body>

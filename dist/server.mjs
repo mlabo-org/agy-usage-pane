@@ -3258,8 +3258,8 @@ var require_utils = __commonJS({
       }
       return ind;
     }
-    function removeDotSegments(path4) {
-      let input2 = path4;
+    function removeDotSegments(path5) {
+      let input2 = path5;
       const output2 = [];
       let nextSlash = -1;
       let len = 0;
@@ -3333,11 +3333,11 @@ var require_utils = __commonJS({
       }
       return output2.join("");
     }
-    function removeDotSegmentsRelative(path4) {
-      if (path4 === "" || path4[0] === "/") {
-        return removeDotSegments(path4);
+    function removeDotSegmentsRelative(path5) {
+      if (path5 === "" || path5[0] === "/") {
+        return removeDotSegments(path5);
       }
-      const segments = path4.split("/");
+      const segments = path5.split("/");
       const last = segments.length - 1;
       const output2 = [];
       let trailingDirectory = false;
@@ -3700,8 +3700,8 @@ var require_schemes = __commonJS({
       }
       if (wsComponent.resourceName) {
         const queryIndex = wsComponent.resourceName.indexOf("?");
-        const path4 = queryIndex === -1 ? wsComponent.resourceName : wsComponent.resourceName.slice(0, queryIndex);
-        wsComponent.path = path4 && path4 !== "/" ? path4 : void 0;
+        const path5 = queryIndex === -1 ? wsComponent.resourceName : wsComponent.resourceName.slice(0, queryIndex);
+        wsComponent.path = path5 && path5 !== "/" ? path5 : void 0;
         wsComponent.query = queryIndex === -1 ? void 0 : wsComponent.resourceName.slice(queryIndex + 1);
         wsComponent.resourceName = void 0;
       }
@@ -7238,12 +7238,12 @@ var require_dist = __commonJS({
         throw new Error(`Unknown format "${name}"`);
       return f;
     };
-    function addFormats(ajv, list, fs4, exportName) {
+    function addFormats(ajv, list, fs5, exportName) {
       var _a3;
       var _b;
       (_a3 = (_b = ajv.opts.code).formats) !== null && _a3 !== void 0 ? _a3 : _b.formats = (0, codegen_1._)`require("ajv-formats/dist/formats").${exportName}`;
       for (const f of list)
-        ajv.addFormat(f, fs4[f]);
+        ajv.addFormat(f, fs5[f]);
     }
     module.exports = exports = formatsPlugin;
     Object.defineProperty(exports, "__esModule", { value: true });
@@ -7252,9 +7252,9 @@ var require_dist = __commonJS({
 });
 
 // server/index.mjs
-import fs3 from "node:fs/promises";
+import fs4 from "node:fs/promises";
 import os3 from "node:os";
-import path3 from "node:path";
+import path4 from "node:path";
 import { fileURLToPath } from "node:url";
 
 // node_modules/zod/v3/helpers/util.js
@@ -7631,8 +7631,8 @@ function getErrorMap() {
 
 // node_modules/zod/v3/helpers/parseUtil.js
 var makeIssue = (params) => {
-  const { data, path: path4, errorMaps, issueData } = params;
-  const fullPath = [...path4, ...issueData.path || []];
+  const { data, path: path5, errorMaps, issueData } = params;
+  const fullPath = [...path5, ...issueData.path || []];
   const fullIssue = {
     ...issueData,
     path: fullPath
@@ -7747,11 +7747,11 @@ var errorUtil;
 
 // node_modules/zod/v3/types.js
 var ParseInputLazyPath = class {
-  constructor(parent, value, path4, key) {
+  constructor(parent, value, path5, key) {
     this._cachedPath = [];
     this.parent = parent;
     this.data = value;
-    this._path = path4;
+    this._path = path5;
     this._key = key;
   }
   get path() {
@@ -11707,10 +11707,10 @@ function mergeDefs(...defs) {
 function cloneDef(schema) {
   return mergeDefs(schema._zod.def);
 }
-function getElementAtPath(obj, path4) {
-  if (!path4)
+function getElementAtPath(obj, path5) {
+  if (!path5)
     return obj;
-  return path4.reduce((acc, key) => acc?.[key], obj);
+  return path5.reduce((acc, key) => acc?.[key], obj);
 }
 function promiseAllObject(promisesObj) {
   const keys = Object.keys(promisesObj);
@@ -12050,11 +12050,11 @@ function explicitlyAborted(x, startIndex = 0) {
   }
   return false;
 }
-function prefixIssues(path4, issues) {
+function prefixIssues(path5, issues) {
   return issues.map((iss) => {
     var _a3;
     (_a3 = iss).path ?? (_a3.path = []);
-    iss.path.unshift(path4);
+    iss.path.unshift(path5);
     return iss;
   });
 }
@@ -12516,16 +12516,16 @@ function flattenError(error62, mapper = (issue2) => issue2.message) {
 }
 function formatError(error62, mapper = (issue2) => issue2.message) {
   const fieldErrors = { _errors: [] };
-  const processError = (error63, path4 = []) => {
+  const processError = (error63, path5 = []) => {
     for (const issue2 of error63.issues) {
       if (issue2.code === "invalid_union" && issue2.errors.length) {
-        issue2.errors.map((issues) => processError({ issues }, [...path4, ...issue2.path]));
+        issue2.errors.map((issues) => processError({ issues }, [...path5, ...issue2.path]));
       } else if (issue2.code === "invalid_key") {
-        processError({ issues: issue2.issues }, [...path4, ...issue2.path]);
+        processError({ issues: issue2.issues }, [...path5, ...issue2.path]);
       } else if (issue2.code === "invalid_element") {
-        processError({ issues: issue2.issues }, [...path4, ...issue2.path]);
+        processError({ issues: issue2.issues }, [...path5, ...issue2.path]);
       } else {
-        const fullpath = [...path4, ...issue2.path];
+        const fullpath = [...path5, ...issue2.path];
         if (fullpath.length === 0) {
           fieldErrors._errors.push(mapper(issue2));
         } else {
@@ -12564,17 +12564,17 @@ function formatError(error62, mapper = (issue2) => issue2.message) {
 }
 function treeifyError(error62, mapper = (issue2) => issue2.message) {
   const result = { errors: [] };
-  const processError = (error63, path4 = []) => {
+  const processError = (error63, path5 = []) => {
     var _a3;
     for (const issue2 of error63.issues) {
       if (issue2.code === "invalid_union" && issue2.errors.length) {
-        issue2.errors.map((issues) => processError({ issues }, [...path4, ...issue2.path]));
+        issue2.errors.map((issues) => processError({ issues }, [...path5, ...issue2.path]));
       } else if (issue2.code === "invalid_key") {
-        processError({ issues: issue2.issues }, [...path4, ...issue2.path]);
+        processError({ issues: issue2.issues }, [...path5, ...issue2.path]);
       } else if (issue2.code === "invalid_element") {
-        processError({ issues: issue2.issues }, [...path4, ...issue2.path]);
+        processError({ issues: issue2.issues }, [...path5, ...issue2.path]);
       } else {
-        const fullpath = [...path4, ...issue2.path];
+        const fullpath = [...path5, ...issue2.path];
         if (fullpath.length === 0) {
           result.errors.push(mapper(issue2));
           continue;
@@ -12613,8 +12613,8 @@ function treeifyError(error62, mapper = (issue2) => issue2.message) {
 }
 function toDotPath(_path) {
   const segs = [];
-  const path4 = _path.map((seg) => typeof seg === "object" ? seg.key : seg);
-  for (const seg of path4) {
+  const path5 = _path.map((seg) => typeof seg === "object" ? seg.key : seg);
+  for (const seg of path5) {
     if (typeof seg === "number")
       segs.push(`[${seg}]`);
     else if (typeof seg === "symbol")
@@ -28165,11 +28165,11 @@ function normalizeObjectSchema(schema) {
   }
   return void 0;
 }
-function getDotPath(path4) {
-  if (path4.length === 0) {
+function getDotPath(path5) {
+  if (path5.length === 0) {
     return "object root";
   }
-  return path4.reduce((acc, seg, index) => {
+  return path5.reduce((acc, seg, index) => {
     if (index === 0) {
       return String(seg);
     }
@@ -30396,13 +30396,13 @@ function resolveRef(ref, ctx) {
   if (!ref.startsWith("#")) {
     throw new Error("External $ref is not supported, only local refs (#/...) are allowed");
   }
-  const path4 = ref.slice(1).split("/").filter(Boolean);
-  if (path4.length === 0) {
+  const path5 = ref.slice(1).split("/").filter(Boolean);
+  if (path5.length === 0) {
     return ctx.rootSchema;
   }
   const defsKey = ctx.version === "draft-2020-12" ? "$defs" : "definitions";
-  if (path4[0] === defsKey) {
-    const key = path4[1] === void 0 ? void 0 : decodeJSONPointerSegment(path4[1]);
+  if (path5[0] === defsKey) {
+    const key = path5[1] === void 0 ? void 0 : decodeJSONPointerSegment(path5[1]);
     if (!key || !ctx.defs[key]) {
       throw new Error(`Reference not found: ${ref}`);
     }
@@ -36931,11 +36931,66 @@ async function collectLocalUsage(nowMs = Date.now()) {
   };
 }
 
+// server/preferences.mjs
+import fs2 from "node:fs/promises";
+import path2 from "node:path";
+var VALID_LANGUAGES = /* @__PURE__ */ new Set(["auto", "ja", "en"]);
+function normalizeLanguagePreference(value) {
+  if (typeof value === "string") {
+    const trimmed = value.trim().toLowerCase();
+    if (VALID_LANGUAGES.has(trimmed)) {
+      return trimmed;
+    }
+  }
+  return "auto";
+}
+var PreferencesStore = class {
+  constructor(dataDir2) {
+    this.dataDir = dataDir2;
+    this.filePath = path2.join(dataDir2, "preferences.json");
+    this.cached = null;
+    this.writeChain = Promise.resolve();
+  }
+  async load() {
+    if (this.cached) {
+      return this.cached;
+    }
+    try {
+      const raw = await fs2.readFile(this.filePath, "utf8");
+      const parsed = JSON.parse(raw);
+      this.cached = {
+        language: normalizeLanguagePreference(parsed?.language)
+      };
+    } catch {
+      this.cached = { language: "auto" };
+    }
+    return this.cached;
+  }
+  async save(partial2) {
+    const op = this.writeChain.then(async () => {
+      const current = await this.load();
+      const next = {
+        ...current,
+        language: partial2 && "language" in partial2 ? normalizeLanguagePreference(partial2.language) : current.language
+      };
+      this.cached = next;
+      await fs2.mkdir(this.dataDir, { recursive: true });
+      const tmpPath = `${this.filePath}.tmp.${process.pid}.${Date.now()}.${Math.random().toString(36).slice(2, 8)}`;
+      await fs2.writeFile(tmpPath, JSON.stringify(next, null, 2), "utf8");
+      await fs2.rename(tmpPath, this.filePath);
+      return next;
+    });
+    this.writeChain = op.catch(() => {
+    });
+    return op;
+  }
+};
+
 // server/quota.mjs
 import { execFile as execFile2 } from "node:child_process";
-import fs2 from "node:fs/promises";
+import fs3 from "node:fs/promises";
 import os2 from "node:os";
-import path2 from "node:path";
+import path3 from "node:path";
 import { promisify as promisify2 } from "node:util";
 var execFileAsync2 = promisify2(execFile2);
 var AGY_TIMEOUT_MS = 2e4;
@@ -36947,7 +37002,7 @@ function resolveAgyCandidates() {
     candidates.push(process.env.ANTIGRAVITY_CLI_PATH);
   }
   candidates.push(
-    path2.join(os2.homedir(), ".local", "bin", "agy"),
+    path3.join(os2.homedir(), ".local", "bin", "agy"),
     "/opt/homebrew/bin/agy",
     "/usr/local/bin/agy",
     "agy"
@@ -36960,7 +37015,7 @@ async function resolveAgyBinary() {
       return candidate;
     }
     try {
-      await fs2.access(candidate, fs2.constants.X_OK);
+      await fs3.access(candidate, fs3.constants.X_OK);
       return candidate;
     } catch {
     }
@@ -37007,7 +37062,7 @@ function parseAgyUsageJson(rawStdout) {
 var QuotaStore = class {
   constructor(dataDir2) {
     this.dataDir = dataDir2;
-    this.cachePath = path2.join(dataDir2, "quota-cache.json");
+    this.cachePath = path3.join(dataDir2, "quota-cache.json");
     this.cached = null;
     this.loaded = false;
     this.inFlight = null;
@@ -37019,7 +37074,7 @@ var QuotaStore = class {
     }
     this.loaded = true;
     try {
-      const raw = await fs2.readFile(this.cachePath, "utf8");
+      const raw = await fs3.readFile(this.cachePath, "utf8");
       const parsed = JSON.parse(raw);
       if (parsed && Array.isArray(parsed.groups) && typeof parsed.fetchedAt === "string") {
         this.cached = parsed;
@@ -37031,10 +37086,10 @@ var QuotaStore = class {
   }
   async saveCache(record2) {
     this.cached = record2;
-    await fs2.mkdir(this.dataDir, { recursive: true });
+    await fs3.mkdir(this.dataDir, { recursive: true });
     const tmpPath = `${this.cachePath}.tmp.${process.pid}`;
-    await fs2.writeFile(tmpPath, JSON.stringify(record2, null, 2), "utf8");
-    await fs2.rename(tmpPath, this.cachePath);
+    await fs3.writeFile(tmpPath, JSON.stringify(record2, null, 2), "utf8");
+    await fs3.rename(tmpPath, this.cachePath);
   }
   isStale(nowMs = Date.now()) {
     if (!this.cached?.fetchedAt) {
@@ -37119,8 +37174,8 @@ var QuotaStore = class {
 
 // server/index.mjs
 var __filename = fileURLToPath(import.meta.url);
-var __dirname = path3.dirname(__filename);
-var PLUGIN_ROOT = path3.resolve(__dirname, "..");
+var __dirname = path4.dirname(__filename);
+var PLUGIN_ROOT = path4.resolve(__dirname, "..");
 var APP_URI = "ui://agy-usage-pane/app.html";
 var APP_MIME_TYPE = "text/html;profile=mcp-app";
 function parseDataDir(argv) {
@@ -37133,13 +37188,13 @@ function parseDataDir(argv) {
       return argv[i + 1].trim();
     }
   }
-  return path3.join(os3.homedir(), ".gemini", "config", "plugin-data", "agy-usage-pane");
+  return path4.join(os3.homedir(), ".gemini", "config", "plugin-data", "agy-usage-pane");
 }
 function getAppHtmlPath() {
   if (process.env.AGY_USAGE_PANE_HTML) {
     return process.env.AGY_USAGE_PANE_HTML;
   }
-  return path3.join(PLUGIN_ROOT, "ui", "dist", "app.html");
+  return path4.join(PLUGIN_ROOT, "ui", "dist", "app.html");
 }
 function formatSummaryText(localUsage, quota) {
   const parts = [];
@@ -37157,6 +37212,7 @@ function formatSummaryText(localUsage, quota) {
 }
 var dataDir = parseDataDir(process.argv.slice(2));
 var quotaStore = new QuotaStore(dataDir);
+var preferencesStore = new PreferencesStore(dataDir);
 var server = new McpServer({
   name: "agy-usage-pane",
   version: "0.1.0"
@@ -37176,7 +37232,7 @@ server.registerResource(
   },
   async () => {
     const htmlPath = getAppHtmlPath();
-    const html = await fs3.readFile(htmlPath, "utf8");
+    const html = await fs4.readFile(htmlPath, "utf8");
     return {
       contents: [
         {
@@ -37206,9 +37262,10 @@ server.registerTool(
     }
   },
   async () => {
-    const [localUsage, cachedQuota] = await Promise.all([
+    const [localUsage, cachedQuota, preferences] = await Promise.all([
       collectLocalUsage(),
-      quotaStore.loadCache()
+      quotaStore.loadCache(),
+      preferencesStore.load()
     ]);
     const quotaStale = quotaStore.isStale();
     const structuredContent = {
@@ -37216,7 +37273,8 @@ server.registerTool(
       quota: cachedQuota,
       quotaStale,
       quotaSource: cachedQuota ? "cache" : "none",
-      quotaError: null
+      quotaError: null,
+      preferences
     };
     return {
       content: [
@@ -37241,14 +37299,16 @@ server.registerTool(
     }
   },
   async () => {
-    const [localUsage, cachedQuota] = await Promise.all([
+    const [localUsage, cachedQuota, preferences] = await Promise.all([
       collectLocalUsage(),
-      quotaStore.loadCache()
+      quotaStore.loadCache(),
+      preferencesStore.load()
     ]);
     const structuredContent = {
       localUsage,
       quota: cachedQuota,
-      quotaStale: quotaStore.isStale()
+      quotaStale: quotaStore.isStale(),
+      preferences
     };
     return {
       content: [
@@ -37258,6 +37318,35 @@ server.registerTool(
         }
       ],
       structuredContent
+    };
+  }
+);
+server.registerTool(
+  "set_preferences",
+  {
+    title: "Set Preferences",
+    description: "Persist Usage Monitor UI preferences (such as display language) in plugin data.",
+    inputSchema: {
+      language: external_exports.enum(["auto", "ja", "en"])
+    },
+    _meta: {
+      ui: {
+        visibility: ["app"]
+      }
+    }
+  },
+  async ({ language }) => {
+    const preferences = await preferencesStore.save({ language });
+    return {
+      content: [
+        {
+          type: "text",
+          text: `Preferences updated: language=${preferences.language}`
+        }
+      ],
+      structuredContent: {
+        preferences
+      }
     };
   }
 );
@@ -37276,9 +37365,10 @@ server.registerTool(
     }
   },
   async ({ force = false } = {}) => {
-    const [result, localUsage] = await Promise.all([
+    const [result, localUsage, preferences] = await Promise.all([
       quotaStore.refresh({ force }),
-      collectLocalUsage()
+      collectLocalUsage(),
+      preferencesStore.load()
     ]);
     const structuredContent = {
       localUsage,
@@ -37286,7 +37376,8 @@ server.registerTool(
       quotaStale: quotaStore.isStale(),
       quotaSource: result.source,
       quotaError: result.error,
-      cooldownSeconds: result.cooldownSeconds ?? null
+      cooldownSeconds: result.cooldownSeconds ?? null,
+      preferences
     };
     return {
       content: [

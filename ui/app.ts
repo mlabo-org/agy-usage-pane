@@ -3,6 +3,14 @@ import {
   applyDocumentTheme,
   applyHostStyleVariables,
 } from '@modelcontextprotocol/ext-apps';
+import {
+  MESSAGES,
+  normalizeLanguagePreference,
+  resolveLocale,
+  type LanguagePreference,
+  type Messages,
+  type ResolvedLocale,
+} from './i18n';
 
 interface QuotaBucket {
   id: string;
@@ -69,6 +77,10 @@ interface LocalUsage {
   failedFiles: number;
 }
 
+interface Preferences {
+  language?: string;
+}
+
 interface Payload {
   localUsage?: LocalUsage;
   quota?: QuotaRecord | null;
@@ -76,7 +88,14 @@ interface Payload {
   quotaSource?: string;
   quotaError?: string | null;
   cooldownSeconds?: number | null;
+  preferences?: Preferences;
 }
+
+type Notice =
+  | { kind: 'cooldown'; seconds: number }
+  | { kind: 'compactSent' }
+  | { kind: 'compactError'; detail: string }
+  | { kind: 'prefError'; detail: string };
 
 const CONTEXT_LIMIT_ASSUMED = 1_000_000;
 const LOCAL_REFRESH_MS = 10_000;
@@ -87,11 +106,15 @@ const state: {
   quota: QuotaRecord | null;
   quotaSource: string;
   quotaError: string | null;
-  notice: string | null;
+  notice: Notice | null;
   refreshingQuota: boolean;
   didInitialAutoFetch: boolean;
   canSendMessage: boolean;
   sendingCompact: boolean;
+  languagePref: LanguagePreference;
+  hostLocale: string | null;
+  hostTimeZone: string | null;
+  prefSaveInFlight: number;
 } = {
   localUsage: null,
   quota: null,
@@ -102,9 +125,30 @@ const state: {
   didInitialAutoFetch: false,
   canSendMessage: false,
   sendingCompact: false,
+  languagePref: 'auto',
+  hostLocale: null,
+  hostTimeZone: null,
+  prefSaveInFlight: 0,
 };
 
 const app = new App({ name: 'Usage Monitor', version: '0.1.0' }, {});
+
+function getNavigatorLocales(): readonly string[] {
+  if (typeof navigator === 'undefined') return [];
+  if (Array.isArray(navigator.languages) && navigator.languages.length > 0) {
+    return navigator.languages;
+  }
+  return navigator.language ? [navigator.language] : [];
+}
+
+function getLocaleContext(): { resolved: ResolvedLocale; msg: Messages } {
+  const resolved = resolveLocale(
+    state.languagePref,
+    state.hostLocale,
+    getNavigatorLocales(),
+  );
+  return { resolved, msg: MESSAGES[resolved.lang] };
+}
 
 function el<K extends keyof HTMLElementTagNameMap>(
   tag: K,
@@ -150,50 +194,62 @@ function toneForContext(pct: number): 'ok' | 'warn' | 'danger' {
   return 'danger';
 }
 
-function formatRelativeAgo(iso: string | null): string {
-  if (!iso) return '未取得';
+function formatRelativeAgo(iso: string | null, msg: Messages): string {
+  if (!iso) return msg.relativeNotFetched;
   const ms = Date.parse(iso);
-  if (!Number.isFinite(ms)) return '未取得';
+  if (!Number.isFinite(ms)) return msg.relativeNotFetched;
   const diffSec = Math.max(0, Math.floor((Date.now() - ms) / 1000));
-  if (diffSec < 15) return 'たった今';
-  if (diffSec < 60) return `${diffSec}秒前`;
+  if (diffSec < 15) return msg.relativeJustNow;
+  if (diffSec < 60) return msg.relativeSecondsAgo(diffSec);
   const mins = Math.floor(diffSec / 60);
-  if (mins < 60) return `${mins}分前`;
+  if (mins < 60) return msg.relativeMinutesAgo(mins);
   const hours = Math.floor(mins / 60);
-  if (hours < 24) return `${hours}時間前`;
+  if (hours < 24) return msg.relativeHoursAgo(hours);
   const days = Math.floor(hours / 24);
-  return `${days}日前`;
+  return msg.relativeDaysAgo(days);
 }
 
-function formatResetCountdown(iso: string | null): string {
-  if (!iso) return 'リセット時刻不明';
-  const targetMs = Date.parse(iso);
-  if (!Number.isFinite(targetMs)) return 'リセット時刻不明';
-  const diffSec = Math.floor((targetMs - Date.now()) / 1000);
-  if (diffSec <= 0) return 'リセット済み（更新で再取得）';
-
-  const days = Math.floor(diffSec / 86_400);
-  const hours = Math.floor((diffSec % 86_400) / 3_600);
-  const mins = Math.floor((diffSec % 3_600) / 60);
-
-  const parts: string[] = [];
-  if (days > 0) parts.push(`${days}日`);
-  if (hours > 0) parts.push(`${hours}時間`);
-  if (days === 0 && mins > 0) parts.push(`${mins}分`);
-  if (parts.length === 0) parts.push('1分未満');
-
-  const localTime = new Date(targetMs).toLocaleString('ja-JP', {
+function formatLocalDateTime(targetMs: number, dateLocale: string): string {
+  const options: Intl.DateTimeFormatOptions = {
     month: 'numeric',
     day: 'numeric',
     hour: '2-digit',
     minute: '2-digit',
-  });
-  return `あと ${parts.join('')} (${localTime})`;
+  };
+  if (state.hostTimeZone) {
+    try {
+      return new Date(targetMs).toLocaleString(dateLocale, {
+        ...options,
+        timeZone: state.hostTimeZone,
+      });
+    } catch {
+      // Ignore invalid host timeZone and fall back to browser timezone.
+    }
+  }
+  return new Date(targetMs).toLocaleString(dateLocale, options);
 }
 
-function windowLabel(windowKey: string): string {
+function formatResetCountdown(
+  iso: string | null,
+  msg: Messages,
+  dateLocale: string,
+): string {
+  if (!iso) return msg.resetUnknown;
+  const targetMs = Date.parse(iso);
+  if (!Number.isFinite(targetMs)) return msg.resetUnknown;
+  const diffSec = Math.floor((targetMs - Date.now()) / 1000);
+  if (diffSec <= 0) return msg.resetPassed;
+
+  const days = Math.floor(diffSec / 86_400);
+  const hours = Math.floor((diffSec % 86_400) / 3_600);
+  const mins = Math.floor((diffSec % 3_600) / 60);
+  const localTime = formatLocalDateTime(targetMs, dateLocale);
+  return msg.resetCountdown(days, hours, mins, localTime);
+}
+
+function windowLabel(windowKey: string, msg: Messages): string {
   if (windowKey === '5h') return '5h';
-  if (windowKey === 'weekly') return '週';
+  if (windowKey === 'weekly') return msg.windowWeekly;
   return windowKey || '--';
 }
 
@@ -206,6 +262,26 @@ function shortGroupName(name: string): string {
 function sortBuckets(buckets: QuotaBucket[]): QuotaBucket[] {
   const rank = (w: string) => (w === '5h' ? 0 : w === 'weekly' ? 1 : 2);
   return [...buckets].sort((a, b) => rank(a.window) - rank(b.window));
+}
+
+function formatNotice(notice: Notice, msg: Messages): string {
+  switch (notice.kind) {
+    case 'cooldown':
+      return msg.quotaCooldownNotice(notice.seconds);
+    case 'compactSent':
+      return msg.compactSentNotice;
+    case 'compactError':
+      return msg.compactErrorNotice(notice.detail);
+    case 'prefError':
+      return msg.prefErrorNotice(notice.detail);
+  }
+}
+
+function applyPreferences(prefs: Preferences | undefined): void {
+  if (!prefs || state.prefSaveInFlight > 0) return;
+  if ('language' in prefs) {
+    state.languagePref = normalizeLanguagePreference(prefs.language);
+  }
 }
 
 function applyPayload(payload: Payload | undefined): void {
@@ -222,10 +298,46 @@ function applyPayload(payload: Payload | undefined): void {
   if ('quotaError' in payload) {
     state.quotaError = payload.quotaError ?? null;
   }
+  applyPreferences(payload.preferences);
   if (payload.cooldownSeconds) {
-    state.notice = `連続更新の保護中（あと ${payload.cooldownSeconds} 秒）`;
-  } else {
+    state.notice = { kind: 'cooldown', seconds: payload.cooldownSeconds };
+  } else if (state.notice?.kind === 'cooldown') {
     state.notice = null;
+  }
+}
+
+async function handleLanguageChange(nextPref: LanguagePreference): Promise<void> {
+  state.languagePref = nextPref;
+  if (state.notice?.kind === 'prefError') {
+    state.notice = null;
+  }
+  state.prefSaveInFlight += 1;
+  render();
+  try {
+    const res = await app.callServerTool({
+      name: 'set_preferences',
+      arguments: { language: nextPref },
+    });
+    if (res.isError) {
+      const errText =
+        res.content
+          ?.map((item) => ('text' in item && typeof item.text === 'string' ? item.text : ''))
+          .filter(Boolean)
+          .join(' ') || 'tool returned error';
+      throw new Error(errText);
+    }
+    const payload = res.structuredContent as Payload | undefined;
+    if (state.prefSaveInFlight === 1 && payload?.preferences?.language) {
+      state.languagePref = normalizeLanguagePreference(payload.preferences.language);
+    }
+  } catch (err) {
+    state.notice = {
+      kind: 'prefError',
+      detail: err instanceof Error ? err.message : String(err),
+    };
+  } finally {
+    state.prefSaveInFlight = Math.max(0, state.prefSaveInFlight - 1);
+    render();
   }
 }
 
@@ -262,6 +374,7 @@ async function pollLocalUsage(): Promise<void> {
     if (payload?.quota && !state.quota) {
       state.quota = payload.quota;
     }
+    applyPreferences(payload?.preferences);
     render();
   } catch {
     // Ignore transient polling errors when view is closing or reloading.
@@ -278,36 +391,43 @@ async function handleCompactClick(): Promise<void> {
       role: 'user',
       content: [{ type: 'text', text: '/compact' }],
     });
-    state.notice = '/compact を会話へ送信しました';
+    state.notice = { kind: 'compactSent' };
   } catch (err) {
-    state.notice = `送信失敗: ${err instanceof Error ? err.message : String(err)}`;
+    state.notice = {
+      kind: 'compactError',
+      detail: err instanceof Error ? err.message : String(err),
+    };
   } finally {
     state.sendingCompact = false;
     render();
   }
 }
 
-function renderQuotaCard(): HTMLElement {
+function renderQuotaCard(msg: Messages, dateLocale: string): HTMLElement {
   const card = el('section', 'card');
 
   const head = el('div', 'section-head');
   head.append(
-    el('span', 'section-title', 'クォータ残量'),
+    el('span', 'section-title', msg.quotaSectionTitle),
     el(
       'span',
       'section-sub',
       state.refreshingQuota
-        ? 'agy /usage 取得中...'
-        : formatRelativeAgo(state.quota?.fetchedAt ?? null),
+        ? msg.quotaFetchingSub
+        : formatRelativeAgo(state.quota?.fetchedAt ?? null, msg),
     ),
   );
   card.append(head);
 
   if (state.quotaError) {
-    card.append(el('div', 'banner error', `取得エラー: ${state.quotaError}`));
+    card.append(el('div', 'banner error', msg.quotaErrorPrefix(state.quotaError)));
   }
   if (state.notice) {
-    card.append(el('div', 'banner', state.notice));
+    const bannerClass =
+      state.notice.kind === 'compactError' || state.notice.kind === 'prefError'
+        ? 'banner error'
+        : 'banner';
+    card.append(el('div', bannerClass, formatNotice(state.notice, msg)));
   }
 
   if (!state.quota || state.quota.groups.length === 0) {
@@ -315,9 +435,7 @@ function renderQuotaCard(): HTMLElement {
       el(
         'div',
         'empty',
-        state.refreshingQuota
-          ? '公式 CLI (agy /usage) から残量を取得中（約7〜8秒）...'
-          : 'まだ取得されていません。右上の「更新」で取得できます。',
+        state.refreshingQuota ? msg.quotaEmptyFetching : msg.quotaEmptyIdle,
       ),
     );
     return card;
@@ -328,7 +446,7 @@ function renderQuotaCard(): HTMLElement {
     const nameRow = el('div', 'group-name');
     nameRow.append(el('span', undefined, shortGroupName(group.name)));
     if (group.name === 'Claude and GPT models') {
-      nameRow.append(el('span', 'group-badge', 'AGY内 3P枠'));
+      nameRow.append(el('span', 'group-badge', msg.thirdPartyBadge));
     }
     groupEl.append(nameRow);
 
@@ -336,7 +454,7 @@ function renderQuotaCard(): HTMLElement {
       const pct = bucket.remainingPercent;
       const tone = toneForRemaining(pct);
       const row = el('div', 'bucket-row');
-      row.append(el('span', 'bucket-label', windowLabel(bucket.window)));
+      row.append(el('span', 'bucket-label', windowLabel(bucket.window, msg)));
 
       const barWrap = el('div', 'bar-wrap');
       const track = el('div', 'track');
@@ -347,7 +465,9 @@ function renderQuotaCard(): HTMLElement {
       row.append(barWrap);
 
       row.append(el('span', `pct ${tone}`, pct === null ? '--' : `${pct}%`));
-      row.append(el('div', 'reset-line', formatResetCountdown(bucket.resetTime)));
+      row.append(
+        el('div', 'reset-line', formatResetCountdown(bucket.resetTime, msg, dateLocale)),
+      );
       groupEl.append(row);
     }
 
@@ -357,20 +477,20 @@ function renderQuotaCard(): HTMLElement {
   return card;
 }
 
-function renderContextAndCacheCard(): HTMLElement {
+function renderContextAndCacheCard(msg: Messages): HTMLElement {
   const card = el('section', 'card');
   const local = state.localUsage;
   const session = local?.latestSession ?? null;
 
   const head = el('div', 'section-head');
   head.append(
-    el('span', 'section-title', 'コンテキスト & キャッシュ'),
-    el('span', 'section-sub', 'ローカルログ'),
+    el('span', 'section-title', msg.contextSectionTitle),
+    el('span', 'section-sub', msg.localLogsSub),
   );
   card.append(head);
 
   if (!local) {
-    card.append(el('div', 'empty', 'ローカルログ集計を読み込み中...'));
+    card.append(el('div', 'empty', msg.localLogsLoading));
     return card;
   }
 
@@ -398,10 +518,10 @@ function renderContextAndCacheCard(): HTMLElement {
     const compBtn = el(
       'button',
       'btn',
-      state.sendingCompact ? '送信中...' : 'comp',
+      state.sendingCompact ? msg.compactSending : 'comp',
     );
     compBtn.disabled = state.sendingCompact;
-    compBtn.title = '現在の会話に /compact（コンテキスト圧縮）を送信';
+    compBtn.title = msg.compactTooltip;
     compBtn.addEventListener('click', () => {
       void handleCompactClick();
     });
@@ -424,8 +544,8 @@ function renderContextAndCacheCard(): HTMLElement {
     if (g.behind > 0) syncParts.push(`↓${g.behind}`);
     const syncText = syncParts.length > 0 ? ` ${syncParts.join(' ')}` : '';
     const statusText = g.clean
-      ? `${g.branch} ✓ クリーン${syncText}`
-      : `${g.branch} ● ${g.changedFiles}件変更${syncText}`;
+      ? msg.gitClean(g.branch, syncText)
+      : msg.gitChanged(g.branch, g.changedFiles, syncText);
     const gitRow = el('div', 'kv-row');
     const statusSpan = el('strong', g.clean ? 'pct ok' : 'pct warn', statusText);
     gitRow.append(el('span', undefined, 'Git'), statusSpan);
@@ -440,12 +560,15 @@ function renderContextAndCacheCard(): HTMLElement {
   const winBox = el('div', 'stat-box');
   const winTone = toneForCache(local.window.cacheHitRate);
   winBox.append(
-    el('span', 'stat-label', 'cache 直近60分'),
+    el('span', 'stat-label', msg.cacheWindowLabel),
     el('span', `stat-value pct ${winTone}`, formatPercent(local.window.cacheHitRate)),
     el(
       'span',
       'stat-sub',
-      `読 ${formatCompactNum(local.window.cacheReadTokens)} / 新 ${formatCompactNum(local.window.freshInputTokens)}`,
+      msg.cacheReadFreshSub(
+        formatCompactNum(local.window.cacheReadTokens),
+        formatCompactNum(local.window.freshInputTokens),
+      ),
     ),
   );
   cacheGrid.append(winBox);
@@ -453,14 +576,17 @@ function renderContextAndCacheCard(): HTMLElement {
   const sessBox = el('div', 'stat-box');
   const sessTone = toneForCache(session?.cacheHitRate ?? null);
   sessBox.append(
-    el('span', 'stat-label', 'cache セッション'),
+    el('span', 'stat-label', msg.cacheSessionLabel),
     el('span', `stat-value pct ${sessTone}`, formatPercent(session?.cacheHitRate ?? null)),
     el(
       'span',
       'stat-sub',
       session
-        ? `読 ${formatCompactNum(session.cacheReadTokens)} / 新 ${formatCompactNum(session.freshInputTokens)}`
-        : '記録なし',
+        ? msg.cacheReadFreshSub(
+            formatCompactNum(session.cacheReadTokens),
+            formatCompactNum(session.freshInputTokens),
+          )
+        : msg.noData,
     ),
   );
   cacheGrid.append(sessBox);
@@ -471,11 +597,15 @@ function renderContextAndCacheCard(): HTMLElement {
   const kv = el('div', 'kv-list');
   const r1 = el('div', 'kv-row');
   r1.append(
-    el('span', undefined, '直近60分 合計'),
+    el('span', undefined, msg.windowTotalLabel),
     el(
       'strong',
       undefined,
-      `${formatCompactNum(local.window.totalTokens)} (出 ${formatCompactNum(local.window.outputTokens)} / ${local.window.turns}t)`,
+      msg.tokenSummaryValue(
+        formatCompactNum(local.window.totalTokens),
+        formatCompactNum(local.window.outputTokens),
+        local.window.turns,
+      ),
     ),
   );
   kv.append(r1);
@@ -483,11 +613,15 @@ function renderContextAndCacheCard(): HTMLElement {
   if (session) {
     const r2 = el('div', 'kv-row');
     r2.append(
-      el('span', undefined, `最新セッション (${session.source})`),
+      el('span', undefined, msg.latestSessionLabel(session.source)),
       el(
         'strong',
         undefined,
-        `${formatCompactNum(session.totalTokens)} (出 ${formatCompactNum(session.outputTokens)} / ${session.turns}t)`,
+        msg.tokenSummaryValue(
+          formatCompactNum(session.totalTokens),
+          formatCompactNum(session.outputTokens),
+          session.turns,
+        ),
       ),
     );
     kv.append(r2);
@@ -514,9 +648,40 @@ function renderContextAndCacheCard(): HTMLElement {
   return card;
 }
 
+function renderLanguageSelect(resolved: ResolvedLocale, msg: Messages): HTMLSelectElement {
+  const select = el('select', 'lang-select');
+  select.setAttribute('aria-label', msg.languageAriaLabel);
+  select.title =
+    resolved.preference === 'auto'
+      ? msg.languageTooltipAuto(resolved)
+      : msg.languageTooltipManual;
+
+  const options: Array<{ value: LanguagePreference; label: string }> = [
+    { value: 'auto', label: 'Auto' },
+    { value: 'ja', label: 'JA' },
+    { value: 'en', label: 'EN' },
+  ];
+  for (const item of options) {
+    const opt = document.createElement('option');
+    opt.value = item.value;
+    opt.textContent = item.label;
+    select.append(opt);
+  }
+  select.value = state.languagePref;
+  select.addEventListener('change', () => {
+    void handleLanguageChange(normalizeLanguagePreference(select.value));
+  });
+  return select;
+}
+
 function render(): void {
   const root = document.getElementById('root');
   if (!root) return;
+  const { resolved, msg } = getLocaleContext();
+  if (document.documentElement.lang !== resolved.lang) {
+    document.documentElement.lang = resolved.lang;
+  }
+
   root.replaceChildren();
 
   const header = el('header', 'header');
@@ -534,33 +699,52 @@ function render(): void {
     el(
       'span',
       'meta-time',
-      state.quota ? `更新: ${formatRelativeAgo(state.quota.fetchedAt)}` : '',
+      state.quota ? msg.headerUpdated(formatRelativeAgo(state.quota.fetchedAt, msg)) : '',
     ),
   );
+
+  const headerActions = el('div', 'header-actions');
+  headerActions.append(renderLanguageSelect(resolved, msg));
 
   const refreshBtn = el(
     'button',
     'btn',
-    state.refreshingQuota ? '取得中...' : 'クォータ更新',
+    state.refreshingQuota ? msg.refreshingButton : msg.refreshButton,
   );
   refreshBtn.disabled = state.refreshingQuota;
   refreshBtn.addEventListener('click', () => {
     void triggerQuotaRefresh(true);
   });
+  headerActions.append(refreshBtn);
 
-  header.append(headerLeft, refreshBtn);
+  header.append(headerLeft, headerActions);
   root.append(header);
 
-  root.append(renderQuotaCard());
-  root.append(renderContextAndCacheCard());
+  root.append(renderQuotaCard(msg, resolved.dateLocale));
+  root.append(renderContextAndCacheCard(msg));
+  root.append(el('footer', 'footer', msg.footerText));
+}
 
-  root.append(
-    el(
-      'footer',
-      'footer',
-      'ローカルログは通信なしで10秒ごとに更新。クォータは開いたとき（2分以上経過時）と手動更新ボタン時のみ公式 agy CLI を単発実行します（定期ポーリングなし）。',
-    ),
-  );
+function applyHostContext(ctx: {
+  theme?: 'light' | 'dark';
+  styles?: { variables?: Record<string, string | undefined> };
+  locale?: string;
+  timeZone?: string;
+} | undefined): boolean {
+  if (!ctx) return false;
+  if (ctx.theme) applyDocumentTheme(ctx.theme);
+  if (ctx.styles?.variables) applyHostStyleVariables(ctx.styles.variables);
+
+  let localeChanged = false;
+  if (typeof ctx.locale === 'string' && ctx.locale.trim() !== (state.hostLocale ?? '')) {
+    state.hostLocale = ctx.locale.trim() || null;
+    localeChanged = true;
+  }
+  if (typeof ctx.timeZone === 'string' && ctx.timeZone.trim() !== (state.hostTimeZone ?? '')) {
+    state.hostTimeZone = ctx.timeZone.trim() || null;
+    localeChanged = true;
+  }
+  return localeChanged;
 }
 
 app.ontoolresult = (result) => {
@@ -575,16 +759,15 @@ app.ontoolresult = (result) => {
 };
 
 app.onhostcontextchanged = (ctx) => {
-  if (ctx.theme) applyDocumentTheme(ctx.theme);
-  if (ctx.styles?.variables) applyHostStyleVariables(ctx.styles.variables);
+  if (applyHostContext(ctx)) {
+    render();
+  }
 };
 
 async function init(): Promise<void> {
   try {
     await app.connect();
-    const ctx = app.getHostContext();
-    if (ctx?.theme) applyDocumentTheme(ctx.theme);
-    if (ctx?.styles?.variables) applyHostStyleVariables(ctx.styles.variables);
+    applyHostContext(app.getHostContext());
 
     const caps = app.getHostCapabilities();
     state.canSendMessage = Boolean(caps?.message);
@@ -605,11 +788,12 @@ async function init(): Promise<void> {
   } catch (err) {
     const root = document.getElementById('root');
     if (root) {
+      const { msg } = getLocaleContext();
       root.replaceChildren(
         el(
           'div',
           'banner error',
-          `UI 初期化エラー: ${err instanceof Error ? err.message : String(err)}`,
+          msg.initError(err instanceof Error ? err.message : String(err)),
         ),
       );
     }
@@ -619,8 +803,9 @@ async function init(): Promise<void> {
 window.addEventListener('error', (event) => {
   const root = document.getElementById('root');
   if (root && !state.localUsage && !state.quota) {
+    const { msg } = getLocaleContext();
     root.replaceChildren(
-      el('div', 'banner error', `UI 実行エラー: ${event.message || 'unknown error'}`),
+      el('div', 'banner error', msg.runtimeError(event.message || 'unknown error')),
     );
   }
 });

@@ -6,6 +6,7 @@ import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import { z } from 'zod';
 import { collectLocalUsage } from './local-usage.mjs';
+import { PreferencesStore } from './preferences.mjs';
 import { QuotaStore } from './quota.mjs';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -57,6 +58,7 @@ function formatSummaryText(localUsage, quota) {
 
 const dataDir = parseDataDir(process.argv.slice(2));
 const quotaStore = new QuotaStore(dataDir);
+const preferencesStore = new PreferencesStore(dataDir);
 
 const server = new McpServer({
   name: 'agy-usage-pane',
@@ -110,9 +112,10 @@ server.registerTool(
     },
   },
   async () => {
-    const [localUsage, cachedQuota] = await Promise.all([
+    const [localUsage, cachedQuota, preferences] = await Promise.all([
       collectLocalUsage(),
       quotaStore.loadCache(),
+      preferencesStore.load(),
     ]);
     const quotaStale = quotaStore.isStale();
     const structuredContent = {
@@ -121,6 +124,7 @@ server.registerTool(
       quotaStale,
       quotaSource: cachedQuota ? 'cache' : 'none',
       quotaError: null,
+      preferences,
     };
     return {
       content: [
@@ -146,14 +150,16 @@ server.registerTool(
     },
   },
   async () => {
-    const [localUsage, cachedQuota] = await Promise.all([
+    const [localUsage, cachedQuota, preferences] = await Promise.all([
       collectLocalUsage(),
       quotaStore.loadCache(),
+      preferencesStore.load(),
     ]);
     const structuredContent = {
       localUsage,
       quota: cachedQuota,
       quotaStale: quotaStore.isStale(),
+      preferences,
     };
     return {
       content: [
@@ -163,6 +169,36 @@ server.registerTool(
         },
       ],
       structuredContent,
+    };
+  },
+);
+
+server.registerTool(
+  'set_preferences',
+  {
+    title: 'Set Preferences',
+    description: 'Persist Usage Monitor UI preferences (such as display language) in plugin data.',
+    inputSchema: {
+      language: z.enum(['auto', 'ja', 'en']),
+    },
+    _meta: {
+      ui: {
+        visibility: ['app'],
+      },
+    },
+  },
+  async ({ language }) => {
+    const preferences = await preferencesStore.save({ language });
+    return {
+      content: [
+        {
+          type: 'text',
+          text: `Preferences updated: language=${preferences.language}`,
+        },
+      ],
+      structuredContent: {
+        preferences,
+      },
     };
   },
 );
@@ -182,9 +218,10 @@ server.registerTool(
     },
   },
   async ({ force = false } = {}) => {
-    const [result, localUsage] = await Promise.all([
+    const [result, localUsage, preferences] = await Promise.all([
       quotaStore.refresh({ force }),
       collectLocalUsage(),
+      preferencesStore.load(),
     ]);
     const structuredContent = {
       localUsage,
@@ -193,6 +230,7 @@ server.registerTool(
       quotaSource: result.source,
       quotaError: result.error,
       cooldownSeconds: result.cooldownSeconds ?? null,
+      preferences,
     };
     return {
       content: [
